@@ -10,50 +10,17 @@ const backgroundEffect = Skia.RuntimeEffect.Make(`
 uniform float2 resolution;
 uniform float time;
 
-float hash21(float2 p) {
-  p = fract(p * float2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-float noise2(float2 p) {
-  float2 i = floor(p);
-  float2 f = fract(p);
-  float a = hash21(i);
-  float b = hash21(i + float2(1.0, 0.0));
-  float c = hash21(i + float2(0.0, 1.0));
-  float d = hash21(i + float2(1.0, 1.0));
-  float2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm(float2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) {
-    v += noise2(p) * a;
-    p = p * 2.03 + 13.7;
-    a *= 0.5;
-  }
-  return v;
-}
-
 half4 main(float2 xy) {
   float2 uv = xy / resolution;
   float aspect = resolution.x / resolution.y;
-  float2 p = uv - float2(0.5, 0.45);
+  float2 p = uv - float2(0.5, 0.46);
   p.x *= aspect;
-
   float d = length(p);
   float radial = 1.0 - smoothstep(0.04, 0.82, d);
-  float cloud = fbm(float2(uv.x * 2.2 + time * 0.008, uv.y * 2.5 - time * 0.006));
-
-  float3 edgeColor = float3(0.002, 0.008, 0.025);
-  float3 centerColor = float3(0.018, 0.20, 0.42);
-  float3 color = mix(edgeColor, centerColor, radial);
-  color += float3(0.00, 0.045, 0.11) * cloud * radial * 0.58;
-  color *= 0.98 + sin(time * 0.10) * 0.02;
-
+  float pulse = 0.98 + sin(time * 0.12) * 0.02;
+  float3 edge = float3(0.003, 0.008, 0.025);
+  float3 center = float3(0.02, 0.20, 0.43);
+  float3 color = mix(edge, center, radial) * pulse;
   return half4(color, 1.0);
 }
 `);
@@ -63,41 +30,19 @@ uniform float2 resolution;
 uniform float time;
 uniform float intensity;
 
-float hash21(float2 p) {
-  p = fract(p * float2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-float noise2(float2 p) {
-  float2 i = floor(p);
-  float2 f = fract(p);
-  float a = hash21(i);
-  float b = hash21(i + float2(1.0, 0.0));
-  float c = hash21(i + float2(0.0, 1.0));
-  float d = hash21(i + float2(1.0, 1.0));
-  float2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm(float2 p) {
-  float value = 0.0;
-  float amplitude = 0.52;
-  for (int i = 0; i < 6; i++) {
-    value += noise2(p) * amplitude;
-    p = float2(
-      p.x * 1.83 - p.y * 1.11,
-      p.x * 1.11 + p.y * 1.83
-    ) + 9.7;
-    amplitude *= 0.5;
-  }
-  return value;
-}
-
-float2 rotate2(float2 p, float a) {
+float2 rot(float2 p, float a) {
   float s = sin(a);
   float c = cos(a);
   return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
+
+float field(float2 p, float t) {
+  float v = 0.0;
+  v += sin(p.x * 4.1 + t * 0.42);
+  v += sin(p.y * 5.3 - t * 0.31);
+  v += sin((p.x + p.y) * 3.7 + t * 0.23);
+  v += sin(length(p) * 9.0 - t * 0.55);
+  return v * 0.25;
 }
 
 half4 main(float2 xy) {
@@ -105,100 +50,68 @@ half4 main(float2 xy) {
   float minDim = min(resolution.x, resolution.y);
   float2 p = (xy - center) / minDim;
 
-  float breath = 1.0 + sin(time * 0.53) * 0.008 + intensity * 0.010;
+  float breath = 1.0 + sin(time * 0.52) * 0.008 + intensity * 0.008;
   float radius = 0.435 * breath;
   float rr = length(p) / radius;
 
   if (rr > 1.0) {
-    float halo = exp(-(rr - 1.0) * 18.0);
-    return half4(0.02, 0.22, 0.72, halo * 0.16);
+    float halo = exp(-(rr - 1.0) * 20.0);
+    return half4(0.03, 0.24, 0.72, halo * 0.14);
   }
 
-  float rSafe = clamp(rr, 0.0, 0.9999);
-  float z = sqrt(max(0.0, 1.0 - rSafe * rSafe));
-
+  float z = sqrt(max(0.0, 1.0 - rr * rr));
   float3 n = normalize(float3(p.x / radius, p.y / radius, z));
 
-  float rotY = time * 0.075;
-  float cy = cos(rotY);
-  float sy = sin(rotY);
+  float angle = time * 0.11;
+  float ca = cos(angle);
+  float sa = sin(angle);
+  float3 r = float3(n.x * ca + n.z * sa, n.y, -n.x * sa + n.z * ca);
 
-  float3 r;
-  r.x = n.x * cy + n.z * sy;
-  r.y = n.y;
-  r.z = -n.x * sy + n.z * cy;
+  float2 q = rot(r.xy * 2.2, -time * 0.05);
+  float f1 = field(q, time);
+  float f2 = field(rot(q * 1.35, 1.2), time * 1.16 + 2.0);
+  float f3 = field(rot(q * 1.75, -0.8), -time * 0.86 + 5.0);
 
-  float2 q = rotate2(r.xy, time * -0.042) * 2.45;
-
-  float largeFlow = fbm(q * 0.90 + float2(time * 0.042, -time * 0.031));
-  float warpX = fbm(q * 1.35 + float2(time * 0.075, 4.7));
-  float warpY = fbm(q * 1.45 + float2(-3.4, -time * 0.061));
-
-  float2 warped = q + float2(warpX - 0.5, warpY - 0.5) * (0.72 + intensity * 0.28);
-
-  float detail = fbm(warped * 2.15 + float2(-time * 0.055, time * 0.083));
-  float micro = fbm(warped * 4.70 + float2(time * 0.12, -time * 0.10));
+  float cool = smoothstep(-0.25, 0.55, f1 + f2 * 0.45);
+  float warm = smoothstep(-0.10, 0.60, f2 - f3 * 0.35);
+  float violetField = smoothstep(-0.30, 0.50, f3 + f1 * 0.25);
 
   float3 deepBlue = float3(0.004, 0.012, 0.10);
-  float3 electricBlue = float3(0.012, 0.17, 0.95);
+  float3 electricBlue = float3(0.015, 0.18, 0.95);
   float3 cyan = float3(0.00, 0.82, 1.00);
-  float3 violet = float3(0.44, 0.025, 0.94);
+  float3 violet = float3(0.44, 0.03, 0.92);
   float3 burgundy = float3(0.42, 0.004, 0.07);
-  float3 magenta = float3(0.95, 0.012, 0.30);
-  float3 whiteHot = float3(0.94, 0.97, 1.00);
+  float3 magenta = float3(0.92, 0.02, 0.30);
+  float3 whiteHot = float3(0.95, 0.98, 1.0);
 
-  float coolField = smoothstep(0.34, 0.72, largeFlow + detail * 0.22);
-  float warmField = smoothstep(
-    0.45,
-    0.72,
-    fbm(rotate2(warped, 1.65) * 1.25 + float2(-time * 0.037, time * 0.028))
-  );
-  float violetField = smoothstep(0.38, 0.68, detail);
-  float cyanField = smoothstep(0.52, 0.79, micro + coolField * 0.25);
+  float3 color = mix(deepBlue, electricBlue, cool);
+  color = mix(color, violet, violetField * 0.68);
+  color = mix(color, burgundy, warm * 0.72);
+  color = mix(color, magenta, warm * violetField * 0.45);
+  color = mix(color, cyan, smoothstep(0.15, 0.78, f1 + f3 * 0.30) * 0.40);
 
-  float3 color = mix(deepBlue, electricBlue, coolField);
-  color = mix(color, violet, violetField * 0.70);
-  color = mix(color, burgundy, warmField * 0.78);
-  color = mix(color, magenta, warmField * detail * 0.55);
-  color = mix(color, cyan, cyanField * 0.52);
+  float lightningA = 1.0 - smoothstep(0.00, 0.10, abs(sin((f1 * 5.0 + f2 * 2.0) * 3.14159265)));
+  float lightningB = 1.0 - smoothstep(0.00, 0.075, abs(sin((f3 * 7.0 - f2 * 1.7 + time * 0.08) * 3.14159265)));
+  float lightning = clamp(lightningA * (0.45 + intensity * 0.45) + lightningB * intensity * 0.55, 0.0, 1.0);
 
-  float e1 = fbm(warped * 3.10 + float2(time * 0.115, -time * 0.084));
-  float contour1 = abs(sin((e1 * 6.8 + largeFlow * 1.9) * 3.14159265));
-  float lightning1 = 1.0 - smoothstep(0.00, 0.090, contour1);
+  float3 lightningColor = mix(cyan, magenta, warm);
+  lightningColor = mix(lightningColor, violet, violetField * 0.38);
+  color += lightningColor * lightning * (0.65 + intensity * 0.75);
+  color += whiteHot * pow(lightning, 3.0) * (0.32 + intensity * 0.42);
 
-  float e2 = fbm(rotate2(warped, -0.76) * 4.15 + float2(-time * 0.082, time * 0.135));
-  float contour2 = abs(sin((e2 * 8.2 + micro * 1.4) * 3.14159265));
-  float lightning2 = 1.0 - smoothstep(0.00, 0.075, contour2);
+  float fresnel = pow(1.0 - z, 2.4);
+  color += float3(0.04, 0.38, 1.0) * fresnel * 0.78;
 
-  float lightning = clamp(
-    lightning1 * (0.50 + intensity * 0.55) +
-    lightning2 * intensity * 0.72,
-    0.0,
-    1.0
-  );
+  float3 lightDir = normalize(float3(-0.35, -0.55, 1.0));
+  float spec = pow(max(dot(n, lightDir), 0.0), 34.0);
+  color += whiteHot * spec * 0.52;
 
-  float3 coolLightning = mix(electricBlue, cyan, 0.78);
-  float3 warmLightning = mix(burgundy, magenta, 0.88);
-  float3 lightningColor = mix(coolLightning, warmLightning, warmField);
-  lightningColor = mix(lightningColor, float3(0.58, 0.20, 1.0), violetField * 0.44);
-
-  color += lightningColor * lightning * (0.90 + intensity * 1.10);
-  color += whiteHot * pow(lightning, 3.2) * (0.60 + intensity * 0.72);
-
-  float fresnel = pow(1.0 - z, 2.5);
-  color += float3(0.05, 0.42, 1.00) * fresnel * 0.92;
-
-  float3 lightDir = normalize(float3(-0.38, -0.55, 1.0));
-  float spec = pow(max(dot(n, lightDir), 0.0), 42.0);
-  color += whiteHot * spec * 0.72;
-
-  color *= 0.76 + z * 0.34;
-  color *= 0.94 + sin(time * 0.73) * (0.025 + intensity * 0.025);
-  color *= 0.92 + intensity * 0.28;
+  color *= 0.78 + z * 0.30;
+  color *= 0.95 + sin(time * 0.72) * (0.02 + intensity * 0.018);
+  color *= 0.94 + intensity * 0.16;
 
   float alpha = 1.0 - smoothstep(0.985, 1.0, rr);
-  alpha = max(alpha, fresnel * 0.68);
-
+  alpha = max(alpha, fresnel * 0.60);
   return half4(color, clamp(alpha, 0.0, 1.0));
 }
 `);
@@ -231,7 +144,7 @@ function EmotionalSphere({ size }: { size: number }) {
     const progress = Math.min(1, seconds / 18);
     const eased = progress * progress * (3 - 2 * progress);
     const slowWave = 0.5 + 0.5 * Math.sin(seconds * 0.19);
-    const intensity = 0.34 + eased * 0.55 + slowWave * 0.10;
+    const intensity = 0.32 + eased * 0.52 + slowWave * 0.08;
 
     return {
       resolution: [size, size],
@@ -250,7 +163,7 @@ function EmotionalSphere({ size }: { size: number }) {
 }
 
 export default function HomeScreen() {
-  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.97, 470), []);
+  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.94, 440), []);
 
   return (
     <View style={styles.screen}>
@@ -260,11 +173,9 @@ export default function HomeScreen() {
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.logo}>STAY</Text>
-
           <View style={styles.progressTrack}>
             <View style={styles.progressFill} />
           </View>
-
           <Text style={styles.progressText}>2 / 5 today</Text>
         </View>
 
@@ -274,7 +185,6 @@ export default function HomeScreen() {
 
         <View style={styles.bottom}>
           <Text style={styles.tagline}>Train the pause before the reaction.</Text>
-
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start Training"
@@ -289,17 +199,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#020711',
-  },
-  content: {
-    flex: 1,
-    paddingTop: 68,
-  },
-  header: {
-    alignItems: 'center',
-  },
+  screen: { flex: 1, backgroundColor: '#020711' },
+  content: { flex: 1, paddingTop: 68 },
+  header: { alignItems: 'center' },
   logo: {
     color: 'rgba(255,255,255,0.96)',
     fontSize: 42,
