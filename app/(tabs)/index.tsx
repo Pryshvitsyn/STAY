@@ -1,190 +1,239 @@
-import React, { useMemo } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  Animated,
+  Dimensions,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Canvas, Fill, Shader, Skia, useClock } from '@shopify/react-native-skia';
-import { useDerivedValue } from 'react-native-reanimated';
+import { Image } from 'expo-image';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const backgroundEffect = Skia.RuntimeEffect.Make(`
-uniform float2 resolution;
-uniform float time;
+const SPHERE_ART = require('@/assets/images/stay-sphere-reference.webp');
 
-half4 main(float2 xy) {
-  float2 uv = xy / resolution;
-  float aspect = resolution.x / resolution.y;
-  float2 p = uv - float2(0.5, 0.46);
-  p.x *= aspect;
-  float d = length(p);
-  float radial = 1.0 - smoothstep(0.04, 0.82, d);
-  float pulse = 0.98 + sin(time * 0.12) * 0.02;
-  float3 edge = float3(0.003, 0.008, 0.025);
-  float3 center = float3(0.02, 0.20, 0.43);
-  float3 color = mix(edge, center, radial) * pulse;
-  return half4(color, 1.0);
-}
-`);
+function useLoopingRotation(duration: number, reverse = false) {
+  const value = useRef(new Animated.Value(0)).current;
 
-const sphereEffect = Skia.RuntimeEffect.Make(`
-uniform float2 resolution;
-uniform float time;
-uniform float intensity;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(value, {
+        toValue: 1,
+        duration,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
 
-float2 rot(float2 p, float a) {
-  float s = sin(a);
-  float c = cos(a);
-  return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+    animation.start();
+    return () => animation.stop();
+  }, [duration, value]);
+
+  return value.interpolate({
+    inputRange: [0, 1],
+    outputRange: reverse ? ['360deg', '0deg'] : ['0deg', '360deg'],
+  });
 }
 
-float field(float2 p, float t) {
-  float v = 0.0;
-  v += sin(p.x * 4.1 + t * 0.42);
-  v += sin(p.y * 5.3 - t * 0.31);
-  v += sin((p.x + p.y) * 3.7 + t * 0.23);
-  v += sin(length(p) * 9.0 - t * 0.55);
-  return v * 0.25;
-}
+function LivingReferenceSphere({ size }: { size: number }) {
+  const slowRotation = useLoopingRotation(150000, false);
+  const innerRotation = useLoopingRotation(42000, true);
+  const innerRotationTwo = useLoopingRotation(68000, false);
 
-half4 main(float2 xy) {
-  float2 center = resolution * 0.5;
-  float minDim = min(resolution.x, resolution.y);
-  float2 p = (xy - center) / minDim;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0)).current;
 
-  float breath = 1.0 + sin(time * 0.52) * 0.008 + intensity * 0.008;
-  float radius = 0.435 * breath;
-  float rr = length(p) / radius;
+  useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 6000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 6000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
 
-  if (rr > 1.0) {
-    float halo = exp(-(rr - 1.0) * 20.0);
-    return half4(0.03, 0.24, 0.72, halo * 0.14);
-  }
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glow, {
+          toValue: 0,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
 
-  float z = sqrt(max(0.0, 1.0 - rr * rr));
-  float3 n = normalize(float3(p.x / radius, p.y / radius, z));
+    pulseLoop.start();
+    glowLoop.start();
 
-  float angle = time * 0.11;
-  float ca = cos(angle);
-  float sa = sin(angle);
-  float3 r = float3(n.x * ca + n.z * sa, n.y, -n.x * sa + n.z * ca);
-
-  float2 q = rot(r.xy * 2.2, -time * 0.05);
-  float f1 = field(q, time);
-  float f2 = field(rot(q * 1.35, 1.2), time * 1.16 + 2.0);
-  float f3 = field(rot(q * 1.75, -0.8), -time * 0.86 + 5.0);
-
-  float cool = smoothstep(-0.25, 0.55, f1 + f2 * 0.45);
-  float warm = smoothstep(-0.10, 0.60, f2 - f3 * 0.35);
-  float violetField = smoothstep(-0.30, 0.50, f3 + f1 * 0.25);
-
-  float3 deepBlue = float3(0.004, 0.012, 0.10);
-  float3 electricBlue = float3(0.015, 0.18, 0.95);
-  float3 cyan = float3(0.00, 0.82, 1.00);
-  float3 violet = float3(0.44, 0.03, 0.92);
-  float3 burgundy = float3(0.42, 0.004, 0.07);
-  float3 magenta = float3(0.92, 0.02, 0.30);
-  float3 whiteHot = float3(0.95, 0.98, 1.0);
-
-  float3 color = mix(deepBlue, electricBlue, cool);
-  color = mix(color, violet, violetField * 0.68);
-  color = mix(color, burgundy, warm * 0.72);
-  color = mix(color, magenta, warm * violetField * 0.45);
-  color = mix(color, cyan, smoothstep(0.15, 0.78, f1 + f3 * 0.30) * 0.40);
-
-  float lightningA = 1.0 - smoothstep(0.00, 0.10, abs(sin((f1 * 5.0 + f2 * 2.0) * 3.14159265)));
-  float lightningB = 1.0 - smoothstep(0.00, 0.075, abs(sin((f3 * 7.0 - f2 * 1.7 + time * 0.08) * 3.14159265)));
-  float lightning = clamp(lightningA * (0.45 + intensity * 0.45) + lightningB * intensity * 0.55, 0.0, 1.0);
-
-  float3 lightningColor = mix(cyan, magenta, warm);
-  lightningColor = mix(lightningColor, violet, violetField * 0.38);
-  color += lightningColor * lightning * (0.65 + intensity * 0.75);
-  color += whiteHot * pow(lightning, 3.0) * (0.32 + intensity * 0.42);
-
-  float fresnel = pow(1.0 - z, 2.4);
-  color += float3(0.04, 0.38, 1.0) * fresnel * 0.78;
-
-  float3 lightDir = normalize(float3(-0.35, -0.55, 1.0));
-  float spec = pow(max(dot(n, lightDir), 0.0), 34.0);
-  color += whiteHot * spec * 0.52;
-
-  color *= 0.78 + z * 0.30;
-  color *= 0.95 + sin(time * 0.72) * (0.02 + intensity * 0.018);
-  color *= 0.94 + intensity * 0.16;
-
-  float alpha = 1.0 - smoothstep(0.985, 1.0, rr);
-  alpha = max(alpha, fresnel * 0.60);
-  return half4(color, clamp(alpha, 0.0, 1.0));
-}
-`);
-
-if (!backgroundEffect || !sphereEffect) {
-  throw new Error('STAY shader compilation failed');
-}
-
-function LivingBackground() {
-  const clock = useClock();
-  const uniforms = useDerivedValue(() => ({
-    resolution: [SCREEN_WIDTH, SCREEN_HEIGHT],
-    time: clock.value / 1000,
-  }));
-
-  return (
-    <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Fill>
-        <Shader source={backgroundEffect} uniforms={uniforms} />
-      </Fill>
-    </Canvas>
-  );
-}
-
-function EmotionalSphere({ size }: { size: number }) {
-  const clock = useClock();
-
-  const uniforms = useDerivedValue(() => {
-    const seconds = clock.value / 1000;
-    const progress = Math.min(1, seconds / 18);
-    const eased = progress * progress * (3 - 2 * progress);
-    const slowWave = 0.5 + 0.5 * Math.sin(seconds * 0.19);
-    const intensity = 0.32 + eased * 0.52 + slowWave * 0.08;
-
-    return {
-      resolution: [size, size],
-      time: seconds,
-      intensity,
+    return () => {
+      pulseLoop.stop();
+      glowLoop.stop();
     };
-  }, [size]);
+  }, [glow, pulse]);
+
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.995, 1.018],
+  });
+
+  const innerScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.08, 1.17],
+  });
+
+  const overlayOpacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.13, 0.28],
+  });
+
+  const secondOverlayOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.06, 0.18],
+  });
+
+  const haloOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.24, 0.48],
+  });
+
+  const innerSize = size * 0.78;
 
   return (
-    <Canvas style={{ width: size, height: size }}>
-      <Fill>
-        <Shader source={sphereEffect} uniforms={uniforms} />
-      </Fill>
-    </Canvas>
+    <View style={[styles.sphereWrap, { width: size, height: size }]}> 
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.halo,
+          {
+            width: size * 0.88,
+            height: size * 0.88,
+            borderRadius: size,
+            opacity: haloOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={{
+          width: size,
+          height: size,
+          transform: [{ scale }, { rotate: slowRotation }],
+        }}>
+        <Image
+          source={SPHERE_ART}
+          contentFit="contain"
+          transition={0}
+          style={{ width: size, height: size }}
+        />
+      </Animated.View>
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.innerMask,
+          {
+            width: innerSize,
+            height: innerSize,
+            borderRadius: innerSize / 2,
+          },
+        ]}>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            left: -(size - innerSize) / 2,
+            top: -(size - innerSize) / 2,
+            opacity: overlayOpacity,
+            transform: [{ scale: innerScale }, { rotate: innerRotation }],
+          }}>
+          <Image
+            source={SPHERE_ART}
+            contentFit="contain"
+            transition={0}
+            style={{ width: size, height: size }}
+          />
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            left: -(size - innerSize) / 2,
+            top: -(size - innerSize) / 2,
+            opacity: secondOverlayOpacity,
+            transform: [{ scale: 1.2 }, { rotate: innerRotationTwo }],
+          }}>
+          <Image
+            source={SPHERE_ART}
+            contentFit="contain"
+            transition={0}
+            style={{ width: size, height: size }}
+          />
+        </Animated.View>
+      </View>
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.glassRim,
+          {
+            width: size * 0.91,
+            height: size * 0.91,
+            borderRadius: size,
+          },
+        ]}
+      />
+    </View>
   );
 }
 
 export default function HomeScreen() {
-  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.94, 440), []);
+  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.94, 430), []);
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <LivingBackground />
+      <View style={styles.backgroundGlow} />
 
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.logo}>STAY</Text>
+
           <View style={styles.progressTrack}>
             <View style={styles.progressFill} />
           </View>
+
           <Text style={styles.progressText}>2 / 5 today</Text>
         </View>
 
         <View style={styles.sphereZone}>
-          <EmotionalSphere size={sphereSize} />
+          <LivingReferenceSphere size={sphereSize} />
         </View>
 
         <View style={styles.bottom}>
           <Text style={styles.tagline}>Train the pause before the reaction.</Text>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start Training"
@@ -199,9 +248,31 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#020711' },
-  content: { flex: 1, paddingTop: 68 },
-  header: { alignItems: 'center' },
+  screen: {
+    flex: 1,
+    backgroundColor: '#01050d',
+    overflow: 'hidden',
+  },
+  backgroundGlow: {
+    position: 'absolute',
+    width: SCREEN_WIDTH * 1.6,
+    height: SCREEN_WIDTH * 1.6,
+    borderRadius: SCREEN_WIDTH,
+    left: -SCREEN_WIDTH * 0.3,
+    top: '18%',
+    backgroundColor: 'rgba(0, 91, 193, 0.22)',
+    shadowColor: '#087dff',
+    shadowOpacity: 0.34,
+    shadowRadius: 110,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  content: {
+    flex: 1,
+    paddingTop: 68,
+  },
+  header: {
+    alignItems: 'center',
+  },
   logo: {
     color: 'rgba(255,255,255,0.96)',
     fontSize: 42,
@@ -234,7 +305,34 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -6,
+    marginTop: -2,
+  },
+  sphereWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  halo: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 105, 255, 0.36)',
+    shadowColor: '#1f8cff',
+    shadowOpacity: 0.9,
+    shadowRadius: 64,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  innerMask: {
+    position: 'absolute',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassRim: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(159, 218, 255, 0.32)',
+    shadowColor: '#4ec7ff',
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
   },
   bottom: {
     alignItems: 'center',
