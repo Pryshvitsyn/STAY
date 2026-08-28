@@ -13,51 +13,44 @@ import { Image } from 'expo-image';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const SPHERE_ART = require('@/assets/images/stay-sphere-reference.webp');
+const SPHERE_SOURCE = require('@/assets/images/stay-sphere-reference.jpg');
 
-function useLoopingRotation(duration: number, reverse = false) {
-  const value = useRef(new Animated.Value(0)).current;
+function LivingSphere({ size }: { size: number }) {
+  const rotationA = useRef(new Animated.Value(0)).current;
+  const rotationB = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(value, {
+    const rotateOuter = Animated.loop(
+      Animated.timing(rotationA, {
         toValue: 1,
-        duration,
+        duration: 52000,
         easing: Easing.linear,
         useNativeDriver: true,
       })
     );
 
-    animation.start();
-    return () => animation.stop();
-  }, [duration, value]);
+    const rotateInner = Animated.loop(
+      Animated.timing(rotationB, {
+        toValue: 1,
+        duration: 76000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
 
-  return value.interpolate({
-    inputRange: [0, 1],
-    outputRange: reverse ? ['360deg', '0deg'] : ['0deg', '360deg'],
-  });
-}
-
-function LivingReferenceSphere({ size }: { size: number }) {
-  const slowRotation = useLoopingRotation(160000, false);
-  const innerRotation = useLoopingRotation(52000, true);
-  const innerRotationTwo = useLoopingRotation(83000, false);
-
-  const pulse = useRef(new Animated.Value(0)).current;
-  const glow = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const pulseLoop = Animated.loop(
+    const breathe = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 6500,
+          duration: 7000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
           toValue: 0,
-          duration: 6500,
+          duration: 7000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -68,153 +61,117 @@ function LivingReferenceSphere({ size }: { size: number }) {
       Animated.sequence([
         Animated.timing(glow, {
           toValue: 1,
-          duration: 10000,
+          duration: 9000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(glow, {
           toValue: 0,
-          duration: 10000,
+          duration: 9000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ])
     );
 
-    pulseLoop.start();
+    rotateOuter.start();
+    rotateInner.start();
+    breathe.start();
     glowLoop.start();
 
     return () => {
-      pulseLoop.stop();
+      rotateOuter.stop();
+      rotateInner.stop();
+      breathe.stop();
       glowLoop.stop();
     };
-  }, [glow, pulse]);
+  }, [glow, pulse, rotationA, rotationB]);
+
+  const outerRotate = rotationA.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const innerRotate = rotationB.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '-360deg'],
+  });
 
   const scale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.997, 1.014],
+    outputRange: [0.992, 1.018],
   });
 
-  const innerScale = pulse.interpolate({
+  const glowOpacity = glow.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.06, 1.14],
+    outputRange: [0.24, 0.42],
   });
-
-  const overlayOpacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.09, 0.20],
-  });
-
-  const secondOverlayOpacity = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.04, 0.12],
-  });
-
-  const haloOpacity = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.20, 0.38],
-  });
-
-  const innerSize = size * 0.74;
 
   return (
-    <View style={[styles.sphereWrap, { width: size, height: size }]}> 
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.halo,
-          {
-            width: size * 0.88,
-            height: size * 0.88,
-            borderRadius: size,
-            opacity: haloOpacity,
-          },
-        ]}
-      />
-
-      <Animated.View
-        style={{
+    <Animated.View
+      style={[
+        styles.sphereWrap,
+        {
           width: size,
           height: size,
-          transform: [{ scale }, { rotate: slowRotation }],
-        }}>
-        <Image
-          source={SPHERE_ART}
-          contentFit="contain"
-          transition={0}
-          style={{ width: size, height: size }}
-        />
-      </Animated.View>
-
-      <View
-        pointerEvents="none"
+          transform: [{ scale }],
+        },
+      ]}>
+      <Animated.View
         style={[
-          styles.innerMask,
+          styles.sphereGlow,
           {
-            width: innerSize,
-            height: innerSize,
-            borderRadius: innerSize / 2,
-          },
-        ]}>
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            left: -(size - innerSize) / 2,
-            top: -(size - innerSize) / 2,
-            opacity: overlayOpacity,
-            transform: [{ scale: innerScale }, { rotate: innerRotation }],
-          }}>
-          <Image
-            source={SPHERE_ART}
-            contentFit="contain"
-            transition={0}
-            style={{ width: size, height: size }}
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            left: -(size - innerSize) / 2,
-            top: -(size - innerSize) / 2,
-            opacity: secondOverlayOpacity,
-            transform: [{ scale: 1.16 }, { rotate: innerRotationTwo }],
-          }}>
-          <Image
-            source={SPHERE_ART}
-            contentFit="contain"
-            transition={0}
-            style={{ width: size, height: size }}
-          />
-        </Animated.View>
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={[
-          styles.glassRim,
-          {
-            width: size * 0.91,
-            height: size * 0.91,
+            width: size * 0.94,
+            height: size * 0.94,
             borderRadius: size,
+            opacity: glowOpacity,
           },
         ]}
       />
-    </View>
+
+      <View style={[styles.sphereMask, { width: size, height: size, borderRadius: size }]}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { transform: [{ rotate: outerRotate }, { scale: 1.02 }] },
+          ]}>
+          <Image
+            source={SPHERE_SOURCE}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        </Animated.View>
+
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              opacity: 0.22,
+              transform: [{ rotate: innerRotate }, { scale: 1.08 }],
+            },
+          ]}>
+          <Image
+            source={SPHERE_SOURCE}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        </Animated.View>
+
+        <View style={styles.glassHighlight} />
+      </View>
+    </Animated.View>
   );
 }
 
 export default function HomeScreen() {
-  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.94, 430), []);
+  const sphereSize = useMemo(() => Math.min(SCREEN_WIDTH * 0.92, 430), []);
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <View style={styles.backgroundGlow} />
+
+      <View style={styles.backgroundCenterGlow} />
 
       <View style={styles.content}>
         <View style={styles.header}>
@@ -228,7 +185,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.sphereZone}>
-          <LivingReferenceSphere size={sphereSize} />
+          <LivingSphere size={sphereSize} />
         </View>
 
         <View style={styles.bottom}>
@@ -253,18 +210,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#01050d',
     overflow: 'hidden',
   },
-  backgroundGlow: {
+  backgroundCenterGlow: {
     position: 'absolute',
     width: SCREEN_WIDTH * 1.6,
     height: SCREEN_WIDTH * 1.6,
     borderRadius: SCREEN_WIDTH,
     left: -SCREEN_WIDTH * 0.3,
-    top: '18%',
-    backgroundColor: 'rgba(0, 91, 193, 0.22)',
-    shadowColor: '#087dff',
-    shadowOpacity: 0.34,
-    shadowRadius: 110,
-    shadowOffset: { width: 0, height: 0 },
+    top: '22%',
+    backgroundColor: 'rgba(0,85,180,0.16)',
   },
   content: {
     flex: 1,
@@ -305,34 +258,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -2,
+    marginTop: -4,
   },
   sphereWrap: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  halo: {
+  sphereGlow: {
     position: 'absolute',
-    backgroundColor: 'rgba(0, 105, 255, 0.36)',
-    shadowColor: '#1f8cff',
+    backgroundColor: '#0B5FEA',
+    shadowColor: '#27A8FF',
     shadowOpacity: 0.9,
-    shadowRadius: 64,
+    shadowRadius: 50,
     shadowOffset: { width: 0, height: 0 },
   },
-  innerMask: {
-    position: 'absolute',
+  sphereMask: {
     overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#041332',
   },
-  glassRim: {
+  glassHighlight: {
     position: 'absolute',
-    borderWidth: 1,
-    borderColor: 'rgba(159, 218, 255, 0.26)',
-    shadowColor: '#4ec7ff',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
+    width: '64%',
+    height: '24%',
+    top: '7%',
+    left: '12%',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    transform: [{ rotate: '-15deg' }],
   },
   bottom: {
     alignItems: 'center',
