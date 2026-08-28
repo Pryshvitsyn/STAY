@@ -39,9 +39,9 @@ function useLoopingRotation(duration: number, reverse = false) {
 }
 
 function LivingReferenceSphere({ size }: { size: number }) {
-  const slowRotation = useLoopingRotation(150000, false);
-  const innerRotation = useLoopingRotation(42000, true);
-  const innerRotationTwo = useLoopingRotation(68000, false);
+  const slowRotation = useLoopingRotation(160000, false);
+  const innerRotation = useLoopingRotation(52000, true);
+  const innerRotationTwo = useLoopingRotation(83000, false);
 
   const pulse = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -51,13 +51,13 @@ function LivingReferenceSphere({ size }: { size: number }) {
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 6000,
+          duration: 6500,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
           toValue: 0,
-          duration: 6000,
+          duration: 6500,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -68,13 +68,13 @@ function LivingReferenceSphere({ size }: { size: number }) {
       Animated.sequence([
         Animated.timing(glow, {
           toValue: 1,
-          duration: 9000,
+          duration: 10000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(glow, {
           toValue: 0,
-          duration: 9000,
+          duration: 10000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -92,30 +92,30 @@ function LivingReferenceSphere({ size }: { size: number }) {
 
   const scale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.995, 1.018],
+    outputRange: [0.997, 1.014],
   });
 
   const innerScale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.08, 1.17],
+    outputRange: [1.06, 1.14],
   });
 
   const overlayOpacity = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.13, 0.28],
+    outputRange: [0.09, 0.20],
   });
 
   const secondOverlayOpacity = glow.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.06, 0.18],
+    outputRange: [0.04, 0.12],
   });
 
   const haloOpacity = glow.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.24, 0.48],
+    outputRange: [0.20, 0.38],
   });
 
-  const innerSize = size * 0.78;
+  const innerSize = size * 0.74;
 
   return (
     <View style={[styles.sphereWrap, { width: size, height: size }]}> 
@@ -182,7 +182,7 @@ function LivingReferenceSphere({ size }: { size: number }) {
             left: -(size - innerSize) / 2,
             top: -(size - innerSize) / 2,
             opacity: secondOverlayOpacity,
-            transform: [{ scale: 1.2 }, { rotate: innerRotationTwo }],
+            transform: [{ scale: 1.16 }, { rotate: innerRotationTwo }],
           }}>
           <Image
             source={SPHERE_ART}
@@ -328,9 +328,9 @@ const styles = StyleSheet.create({
   glassRim: {
     position: 'absolute',
     borderWidth: 1,
-    borderColor: 'rgba(159, 218, 255, 0.32)',
+    borderColor: 'rgba(159, 218, 255, 0.26)',
     shadowColor: '#4ec7ff',
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.22,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 0 },
   },
